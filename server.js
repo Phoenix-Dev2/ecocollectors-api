@@ -3,7 +3,9 @@ const path = require("path");
 const express = require("express");
 const bodyParser = require("body-parser");
 const cookieParser = require("cookie-parser");
+const cors = require("cors");
 const app = express();
+
 const authRoutes = require("./routes/auth.js");
 const requestsRoutes = require("./routes/requests.js");
 const markersRoutes = require("./routes/markers.js");
@@ -19,35 +21,23 @@ const welcomeAdmin = require("./routes/welcomeAdmin.js");
 const welcomeRecycler = require("./routes/welcomeRecycler.js");
 const welcomeManager = require("./routes/welcomeManager.js");
 const welcomeUser = require("./routes/welcomeUser.js");
-const cors = require("cors");
+
 const port = process.env.PORT || 5432;
 
-app.use(bodyParser.urlencoded({ extended: false }));
+// CORS configuration
+const corsOptions = {
+  origin: ["http://localhost:3000", "https://ecocollectors-api.onrender.com"], // Allowed origins
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true,
+};
+app.use(cors(corsOptions));
 
 // Middleware
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser());
 
-// CORS configuration
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL,
-    methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
-    credentials: true,
-  })
-);
-
-// Allow cross-origin requests
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", process.env.CLIENT_URL || "*");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
-  );
-  next();
-});
-
-// Serve static files from the 'public' / 'src' directory
+// Serve static files
 app.use(express.static(path.join(__dirname, "src")));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -64,7 +54,6 @@ app.use("/api/user/welcome", welcomeUser);
 app.use("/api/admin", adminRoutes);
 app.use("/api/manager", managerRoutes);
 app.use("/api/recycler", recyclerRoutes);
-// Welcome pages routes
 app.use("/api/user/welcomeAdmin", welcomeAdmin);
 app.use("/api/user/welcomeUser", welcomeUser);
 app.use("/api/user/welcomeRecycler", welcomeRecycler);
