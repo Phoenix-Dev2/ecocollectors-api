@@ -54,22 +54,22 @@ app.use(express.static(path.join(__dirname, "src")));
 app.use(express.static(path.join(__dirname, "public")));
 
 // Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/requests", requestsRoutes);
-app.use("/api/markers", markersRoutes);
-app.use("/api/recyclers", recyclers);
-app.use("/api/recyclersManagers", recyclersManagers);
-app.use("/api/user", user);
-app.use("/api/dashboardUser", dashboardUser);
-app.use("/api/dashboardRecycler", dashboardRecycler);
-app.use("/api/user/welcome", welcomeUser);
-app.use("/api/admin", adminRoutes);
-app.use("/api/manager", managerRoutes);
-app.use("/api/recycler", recyclerRoutes);
-app.use("/api/user/welcomeAdmin", welcomeAdmin);
-app.use("/api/user/welcomeUser", welcomeUser);
-app.use("/api/user/welcomeRecycler", welcomeRecycler);
-app.use("/api/user/welcomeManager", welcomeManager);
+app.use("/auth", authRoutes);
+app.use("/requests", requestsRoutes);
+app.use("/markers", markersRoutes);
+app.use("/recyclers", recyclers);
+app.use("/recyclersManagers", recyclersManagers);
+app.use("/user", user);
+app.use("/dashboardUser", dashboardUser);
+app.use("/dashboardRecycler", dashboardRecycler);
+app.use("/user/welcome", welcomeUser);
+app.use("/admin", adminRoutes);
+app.use("/manager", managerRoutes);
+app.use("/recycler", recyclerRoutes);
+app.use("/user/welcomeAdmin", welcomeAdmin);
+app.use("/user/welcomeUser", welcomeUser);
+app.use("/user/welcomeRecycler", welcomeRecycler);
+app.use("/user/welcomeManager", welcomeManager);
 
 app.listen(port, () => {
   console.log(`Server started on port ${port}`);
