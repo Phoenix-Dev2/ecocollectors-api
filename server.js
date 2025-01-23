@@ -24,18 +24,28 @@ const welcomeUser = require("./routes/welcomeUser.js");
 
 const port = process.env.PORT || 5432;
 
-// CORS configuration
-const corsOptions = {
-  origin: ["http://localhost:3000", "https://ecocollectors-api.onrender.com"], // Allowed origins
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true,
-};
-app.use(cors(corsOptions));
-
 // Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser());
+
+// CORS configuration
+const corsOptions = {
+  origin: process.env.CLIENT_URL,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+  credentials: true,
+};
+app.use(cors(corsOptions));
+
+// Allow cross-origin requests
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", process.env.CLIENT_URL || "*");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
+  next();
+});
 
 // Serve static files
 app.use(express.static(path.join(__dirname, "src")));
