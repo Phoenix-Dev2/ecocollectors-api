@@ -1,11 +1,11 @@
 const mysql2 = require("mysql2");
 
 const db = mysql2.createConnection({
-  host: "ecocollectors-ecocollectors.e.aivencloud.com",
-  port: 13351,
-  user: "avnadmin",
-  password: "AVNS_oFUMlpjfkhwbxqAxdxu",
-  database: "defaultdb",
+  host: "phoenixdev.helioho.st",
+  port: 3306,
+  user: "phoenixdev_admin",
+  password: "uWK@hr8Xnm6tyau",
+  database: "phoenixdev_ecocollectors",
   waitForConnections: true,
   connectionLimit: 50,
   queueLimit: 0,
