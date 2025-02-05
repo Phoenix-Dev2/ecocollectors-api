@@ -73,6 +73,7 @@ const login = (req, res) => {
     const token = jwt.sign({ id: data[0].ID, role: data[0].role }, "jwtkey", {
       expiresIn: "1d",
     });
+
     // removing the password from the data object so it will not be sent
     const { active, password, ...other } = data[0];
 
@@ -80,7 +81,12 @@ const login = (req, res) => {
     res
       .cookie("access_token", token, {
         httpOnly: true,
-        secure: true, // Only transmit the cookie over HTTPS
+        secure: process.env.NODE_ENV === "production", // ✅ True in production (Render uses HTTPS)
+        sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", // ✅ "None" allows cross-site cookies in production
+        domain:
+          process.env.NODE_ENV === "production"
+            ? ".your-production-url.com"
+            : undefined, // ✅ Optional for subdomains
       })
       .status(200)
       .json(other);
