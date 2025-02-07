@@ -1,6 +1,6 @@
 const mysql2 = require("mysql2");
 
-const db = mysql2.createConnection({
+const db = mysql2.createPool({
   host: "phoenixdev.helioho.st",
   port: 3306,
   user: "phoenixdev_admin",
@@ -22,4 +22,4 @@ db.connect((err) => {
   console.log("Connected to the database!");
 });
 
-module.exports = { db };
+module.exports = db.promise();

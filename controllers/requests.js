@@ -1,75 +1,84 @@
-const { db } = require('../db.js');
-const jwt = require('jsonwebtoken');
+const { db } = require("../db.js");
+const jwt = require("jsonwebtoken");
 
 // Utility function to get current date and time in 'YYYY-MM-DD HH:mm:ss' format with GMT+3 offset
 const getCurrentDateTime = () => {
   const now = new Date();
   now.setHours(now.getHours() + 3); // Add 3 hours to account for GMT+3
-  const formattedDate = now.toISOString().slice(0, 19).replace('T', ' ');
+  const formattedDate = now.toISOString().slice(0, 19).replace("T", " ");
   return formattedDate;
 };
 
-const getRequests = (req, res) => {
-  const q = 'SELECT * FROM user_requests WHERE status = 1 OR status = 2';
-  db.query(q, (err, data) => {
-    if (err) {
-      console.error(err); // Log the error message
-      return res.status(500).send(err);
-    }
-    return res.status(200).json(data);
-  });
+const getRequests = async (req, res) => {
+  try {
+    const [data] = await db.query(
+      "SELECT * FROM user_requests WHERE status IN (1, 2)"
+    );
+    res.status(200).json(data.length ? data : []);
+  } catch (err) {
+    console.error("Error fetching requests:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Not for recycle requests purposes - update
-const getRequest = (req, res) => {
+const getRequest = async (req, res) => {
   const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+  if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, decoded) => {
-    if (err) return res.status(403).json('Token is not valid');
+  jwt.verify(token, "jwtkey", async (err, decoded) => {
+    if (err) return res.status(403).json("Token is not valid");
+
     const userRole = decoded.role;
-    if (
-      userRole === 1 ||
-      userRole === 2 ||
-      userRole === 3 ||
-      userRole === 4 ||
-      userRole === 5
-    ) {
-      const q =
-        'SELECT `request_id`,`user_id`,`full_name`,`req_lat`, `req_lng`, `req_address`,`phone_number`,`bottles_number`,`from_hour`,`to_hour`,`request_date`,`completed_date`,`status`,`type` FROM user_requests WHERE request_id = ?';
-      db.query(q, [req.params.id], (err, data) => {
-        if (err) return res.status(500).send(err);
-        console.log(data[0]);
-        return res.status(200).json(data[0]);
-      });
-    } else {
-      return res.status(403).json('Invalid user role');
+    if (![1, 2, 3, 4, 5].includes(userRole)) {
+      return res.status(403).json("Invalid user role");
+    }
+
+    try {
+      const [data] = await db.query(
+        "SELECT request_id, user_id, full_name, req_lat, req_lng, req_address, phone_number, bottles_number, from_hour, to_hour, request_date, completed_date, status, type FROM user_requests WHERE request_id = ?",
+        [req.params.id]
+      );
+
+      if (!data.length) {
+        return res.status(404).json({ error: "Request not found" });
+      }
+
+      res.status(200).json(data[0]);
+    } catch (err) {
+      console.error("Error fetching request:", err);
+      res.status(500).json({ error: "Internal Server Error" });
     }
   });
 };
 
 // for recycle requests purposes - Collect request
-const getRequestForRecycle = (req, res) => {
+const getRequestForRecycle = async (req, res) => {
   const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+  if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, decoded) => {
-    if (err) return res.status(403).json('Token is not valid');
+  jwt.verify(token, "jwtkey", async (err, decoded) => {
+    if (err) return res.status(403).json("Token is not valid");
+
     const userRole = decoded.role;
-    if (
-      userRole === 1 || // Administrator
-      userRole === 3 || // Recycler
-      userRole === 4 // Manager
-    ) {
-      const q =
-        'SELECT `request_id`,`user_id`,`full_name`,`req_lat`, `req_lng`, `req_address`,`phone_number`,`bottles_number`,`from_hour`,`to_hour`,`request_date`,`completed_date`,`status`,`type` FROM user_requests WHERE request_id = ?';
-      db.query(q, [req.params.id], (err, data) => {
-        if (err) return res.status(500).send(err);
-        console.log(data[0]);
-        return res.status(200).json(data[0]);
-      });
-    } else {
-      return res.status(403).json('Invalid user role');
+    if (![1, 3, 4].includes(userRole)) {
+      return res.status(403).json("Invalid user role");
+    }
+
+    try {
+      const [data] = await db.query(
+        "SELECT request_id, user_id, full_name, req_lat, req_lng, req_address, phone_number, bottles_number, from_hour, to_hour, request_date, completed_date, status, type FROM user_requests WHERE request_id = ?",
+        [req.params.id]
+      );
+
+      if (!data.length) {
+        return res.status(404).json({ error: "Request not found" });
+      }
+
+      res.status(200).json(data[0]);
+    } catch (err) {
+      console.error("Error fetching request for recycle:", err);
+      res.status(500).json({ error: "Internal Server Error" });
     }
   });
 };
@@ -77,17 +86,17 @@ const getRequestForRecycle = (req, res) => {
 const addRequest = (req, res) => {
   const token = req.cookies.access_token;
   const reqStatus = 1;
-  const reqType = 'request';
+  const reqType = "request";
   //const reqLat = parseFloat(req.body.reqLat);
   //const reqLng = parseFloat(req.body.reqLng);
-  if (!token) return res.status(401).json('Not authenticated');
+  if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, decoded) => {
-    if (err) return res.status(403).json('Token is not valid');
+  jwt.verify(token, "jwtkey", (err, decoded) => {
+    if (err) return res.status(403).json("Token is not valid");
     const userId = decoded.id;
 
     const q =
-      'INSERT INTO user_requests (`user_id`,`full_name`,`req_lat`,`req_lng`,`req_address`,`phone_number`,`bottles_number`,`from_hour`,`to_hour`,`request_date`,`status`,`type`) VALUES (?)';
+      "INSERT INTO user_requests (`user_id`,`full_name`,`req_lat`,`req_lng`,`req_address`,`phone_number`,`bottles_number`,`from_hour`,`to_hour`,`request_date`,`status`,`type`) VALUES (?)";
 
     const values = [
       userId,
@@ -105,37 +114,37 @@ const addRequest = (req, res) => {
     ];
     db.query(q, [values], (err, data) => {
       if (err) return res.status(500).send(err);
-      return res.status(200).json('Request has been created');
+      return res.status(200).json("Request has been created");
     });
   });
 };
 
 const deleteRequest = (req, res) => {
   const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+  if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid');
-    const requestId = req.params.is;
+  jwt.verify(token, "jwtkey", (err, userInfo) => {
+    if (err) return res.status(403).json("Token is not valid");
+    const requestId = req.params.id;
     const q =
-      'DELETE FROM user_request WHERE `request_id` = ? AND `user_id` = ?  ';
+      "DELETE FROM user_request WHERE `request_id` = ? AND `user_id` = ?  ";
 
     db.query(q, [requestId, userInfo.id], (err, data) => {
       if (err)
-        return res.status(403).json('You can delete only your requests!');
-      return res.json('Request has been deleted!');
+        return res.status(403).json("You can delete only your requests!");
+      return res.json("Request has been deleted!");
     });
   });
 };
 
 const updateRequestType = (req, res) => {
   const token = req.cookies.access_token;
-  const type = 'pending';
+  const type = "pending";
   const status = 2;
-  if (!token) return res.status(401).json('Not authenticated!');
+  if (!token) return res.status(401).json("Not authenticated!");
 
-  jwt.verify(token, 'jwtkey', (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
+  jwt.verify(token, "jwtkey", (err, userInfo) => {
+    if (err) return res.status(403).json("Token is not valid!");
     //console.log('User Id:' + userInfo.id);
     const requestId = req.params.id;
     const q =
@@ -145,7 +154,7 @@ const updateRequestType = (req, res) => {
 
     db.query(q, [...values, requestId], (err, data) => {
       if (err) return res.status(500).json(err);
-      return res.json('Request has been updated.');
+      return res.json("Request has been updated.");
     });
   });
 };
@@ -154,19 +163,19 @@ const updateRequestByUser = (req, res) => {
   //console.log('In updateRequestByUser');
   const token = req.cookies.access_token;
 
-  if (!token) return res.status(401).json('Not authenticated!');
+  if (!token) return res.status(401).json("Not authenticated!");
 
-  jwt.verify(token, 'jwtkey', async (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
+  jwt.verify(token, "jwtkey", async (err, userInfo) => {
+    if (err) return res.status(403).json("Token is not valid!");
 
     const requestId = req.params.id; // Request ID
     const updatedData = req.body; // Updated data sent from frontend
 
-    console.log('Updated Data:', updatedData);
+    console.log("Updated Data:", updatedData);
 
     // Retrieve the request to check user_id
     const getRequestQuery =
-      'SELECT user_id FROM user_requests WHERE request_id = ?';
+      "SELECT user_id FROM user_requests WHERE request_id = ?";
 
     db.query(getRequestQuery, [requestId], (err, requestResult) => {
       if (err) {
@@ -184,34 +193,34 @@ const updateRequestByUser = (req, res) => {
 
       // Check if the user is authorized to update this request
       if (userRole === 1 || requestUserId === userId) {
-        let updateQuery = 'UPDATE user_requests SET ';
+        let updateQuery = "UPDATE user_requests SET ";
         const values = [];
 
         for (const key in updatedData) {
-          if (key !== 'request_id') {
+          if (key !== "request_id") {
             // Exclude updating request_id
             updateQuery += `${key}=?, `;
             values.push(updatedData[key]);
           }
         }
 
-        updateQuery += '`request_date`=NOW() WHERE `request_id` = ?';
+        updateQuery += "`request_date`=NOW() WHERE `request_id` = ?";
         values.push(requestId);
 
         //console.log('Update Query:', updateQuery);
-        console.log('Update Values:', values);
+        console.log("Update Values:", values);
 
         db.query(updateQuery, values, (err, data) => {
           if (err) {
             console.error(err);
             return res.status(500).json(err);
           }
-          return res.json('Request has been updated by user.');
+          return res.json("Request has been updated by user.");
         });
       } else {
         return res
           .status(403)
-          .json('You are not authorized to update this request.');
+          .json("You are not authorized to update this request.");
       }
     });
   });
