@@ -1,6 +1,6 @@
 const mysql2 = require("mysql2");
 
-const db = mysql2.createConnection({
+const db = mysql2.createPool({
   host: "phoenixdev.helioho.st",
   port: 3306,
   user: "phoenixdev_admin",
@@ -14,12 +14,13 @@ const db = mysql2.createConnection({
   },
 });
 
-db.connect((err) => {
+db.getConnection((err, connection) => {
   if (err) {
-    console.error("Database connection failed: ", err.message);
-    return;
+    console.error("Database connection error:", err);
+    process.exit(1); // Exit process if DB connection fails
   }
-  console.log("Connected to the database!");
+  console.log("Connected to MySQL Database.");
+  connection.release(); // Release the connection after checking
 });
 
-module.exports = { db };
+module.exports = db.promise();

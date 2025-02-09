@@ -1,375 +1,349 @@
-const { db } = require('../db.js');
-const jwt = require('jsonwebtoken');
+const jwt = require("jsonwebtoken");
+const executeQuery = require("../dbHelper");
 
 // Users
-const getAllUsers = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+const getAllUsers = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
-
-    // Check if the user is an administrator
+    const userInfo = jwt.verify(token, "jwtkey");
     if (userInfo.role !== 1) {
       return res
         .status(403)
-        .json('You are not authorized to access this resource');
+        .json("You are not authorized to access this resource");
     }
 
-    const selectQuery =
-      'SELECT ID, role, first_name, last_name, email, city, address, phone, amount, active FROM users WHERE role != 1';
+    const users = await executeQuery(
+      "SELECT ID, role, first_name, last_name, email, city, address, phone, amount, active FROM users WHERE role != 1"
+    );
 
-    db.query(selectQuery, (err, data) => {
-      if (err) return res.status(500).json(err);
-      return res.json(data);
-    });
-  });
+    return res.json(users);
+  } catch (error) {
+    console.error("Error in getAllUsers:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
-const toggleUserActivation = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+const toggleUserActivation = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
-
-    // Check if the user is an administrator
+    const userInfo = jwt.verify(token, "jwtkey");
     if (userInfo.role !== 1) {
       return res
         .status(403)
-        .json('You are not authorized to access this resource');
+        .json("You are not authorized to access this resource");
     }
 
     const { userId } = req.params;
     const { active } = req.body;
-    //console.log('User ID: ' + userId);
-    //console.log('Active: ' + active);
 
-    const updateQuery = 'UPDATE users SET active = ? WHERE ID = ?';
+    const result = await executeQuery(
+      "UPDATE users SET active = ? WHERE ID = ?",
+      [active, userId]
+    );
 
-    db.query(updateQuery, [active, userId], (err, result) => {
-      if (err) return res.status(500).json(err);
-      if (result.affectedRows === 0) {
-        return res.status(404).json('User not found');
-      }
-      return res.json('User activation status updated successfully');
-    });
-  });
+    if (result.affectedRows === 0) {
+      return res.status(404).json("User not found");
+    }
+
+    return res.json("User activation status updated successfully");
+  } catch (error) {
+    console.error("Error in toggleUserActivation:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Recyclers Managers
+const getAllJoinRequests = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-const getAllJoinRequests = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
-
-  jwt.verify(token, 'jwtkey', (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
-
-    // Check if the user is an administrator
+    const userInfo = jwt.verify(token, "jwtkey");
     if (userInfo.role !== 1) {
       return res
         .status(403)
-        .json('You are not authorized to access this resource');
+        .json("You are not authorized to access this resource");
     }
 
-    // Get the status filter from the query parameters
     const statusFilter = req.query.status;
+    const query = statusFilter
+      ? "SELECT * FROM recyclers_manager_join_requests WHERE status = ?"
+      : "SELECT * FROM recyclers_manager_join_requests";
 
-    // Construct the SQL query based on the status filter
-    let selectQuery = 'SELECT * FROM recyclers_manager_join_requests';
-    if (statusFilter) {
-      selectQuery += ' WHERE status = ?';
-    }
+    const data = await executeQuery(query, statusFilter ? [statusFilter] : []);
 
-    db.query(selectQuery, [statusFilter], (err, data) => {
-      if (err) return res.status(500).json(err);
-      return res.json(data);
-    });
-  });
+    return res.json(data);
+  } catch (error) {
+    console.error("Error in getAllJoinRequests:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
-const updateJoinRequestStatus = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+const updateJoinRequestStatus = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
-
-    // Check if the user is an administrator
+    const userInfo = jwt.verify(token, "jwtkey");
     if (userInfo.role !== 1) {
       return res
         .status(403)
-        .json('You are not authorized to access this resource');
+        .json("You are not authorized to access this resource");
     }
 
     const { joinID } = req.params;
     const newStatus = req.body.status;
-    console.log('Join ID: ' + joinID);
-    console.log('newStatus: ' + newStatus);
 
-    const updateQuery =
-      'UPDATE recyclers_manager_join_requests SET status = ? WHERE join_id = ?';
+    const result = await executeQuery(
+      "UPDATE recyclers_manager_join_requests SET status = ? WHERE join_id = ?",
+      [newStatus, joinID]
+    );
 
-    db.query(updateQuery, [newStatus, joinID], async (err, result) => {
-      if (err) return res.status(500).json(err);
-      if (result.affectedRows === 0) {
-        return res.status(404).json('Join request not found');
-      }
+    if (result.affectedRows === 0) {
+      return res.status(404).json("Join request not found");
+    }
 
-      // If the new status is 'Approved' (3), update the user's role to 4 (recycler manager)
-      if (newStatus === 3) {
-        try {
-          // Update the user's role to 4 (recycler manager)
-          const userQuery = 'UPDATE users SET role = ? WHERE ID = ?';
-          await db.query(userQuery, [4, req.body.userID]);
-        } catch (error) {
-          console.error('Error updating user role:', error);
-          return res.status(500).json('Error updating user role');
-        }
-      }
+    if (newStatus === 3) {
+      await executeQuery("UPDATE users SET role = ? WHERE ID = ?", [
+        4,
+        req.body.userID,
+      ]);
+    }
 
-      return res.json('Join request status updated successfully');
-    });
-  });
+    return res.json("Join request status updated successfully");
+  } catch (error) {
+    console.error("Error in updateJoinRequestStatus:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Recycle Requests
+const fetchAllRequests = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-const fetchAllRequests = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
-
-  jwt.verify(token, 'jwtkey', async (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
-
-    // Check if the user is an administrator
+    const userInfo = jwt.verify(token, "jwtkey");
     if (userInfo.role !== 1) {
       return res
         .status(403)
-        .json('You are not authorized to access this resource');
+        .json("You are not authorized to access this resource");
     }
 
     const { status } = req.query;
+    const query = status
+      ? "SELECT * FROM user_requests WHERE status = ?"
+      : "SELECT * FROM user_requests";
 
-    let selectQuery = 'SELECT * FROM user_requests';
-    const queryParams = [];
+    const data = await executeQuery(query, status ? [status] : []);
 
-    if (status) {
-      selectQuery += ' WHERE status = ?';
-      queryParams.push(status);
-    }
-
-    db.query(selectQuery, queryParams, (err, data) => {
-      if (err) return res.status(500).json(err);
-      return res.json(data);
-    });
-  });
+    return res.json(data);
+  } catch (error) {
+    console.error("Error in fetchAllRequests:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Search requests by user_id
-const searchRequests = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+const searchRequests = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', async (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
-
-    // Check if the user is an administrator
+    const userInfo = jwt.verify(token, "jwtkey");
     if (userInfo.role !== 1) {
       return res
         .status(403)
-        .json('You are not authorized to access this resource');
+        .json("You are not authorized to access this resource");
     }
 
     const { searchTerm } = req.query;
 
-    let selectQuery = 'SELECT * FROM user_requests';
+    let selectQuery = "SELECT * FROM user_requests";
     const queryParams = [];
 
     if (searchTerm) {
-      selectQuery += ' WHERE user_id = ? ';
-      queryParams.push(searchTerm, searchTerm);
+      selectQuery += " WHERE user_id = ?";
+      queryParams.push(searchTerm);
     }
 
-    db.query(selectQuery, queryParams, (err, data) => {
-      if (err) return res.status(500).json(err);
-      return res.json(data);
-    });
-  });
+    const data = await executeQuery(selectQuery, queryParams);
+
+    return res.json(data);
+  } catch (error) {
+    console.error("Error in searchRequests:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Update the request status per scenario
-const updateRequestStatus = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+const updateRequestStatus = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
-
-    // Check if the user is an administrator
+    const userInfo = jwt.verify(token, "jwtkey");
     if (userInfo.role !== 1) {
       return res
         .status(403)
-        .json('You are not authorized to access this resource');
+        .json("You are not authorized to access this resource");
     }
 
     const { requestId } = req.params;
     const { status } = req.body;
+    const type = status === 4 ? "hold" : null;
 
-    // Set 'type' field to 'pending' when changing status to 4 (Hold)
-    const type = status === 4 ? 'hold' : null;
+    const result = await executeQuery(
+      "UPDATE user_requests SET status = ?, type = ? WHERE request_id = ?",
+      [status, type, requestId]
+    );
 
-    const updateQuery =
-      'UPDATE user_requests SET status = ?, type = ? WHERE request_id = ?';
+    if (result.affectedRows === 0) {
+      return res.status(404).json("Request not found");
+    }
 
-    db.query(updateQuery, [status, type, requestId], (err, result) => {
-      if (err) return res.status(500).json(err);
-      if (result.affectedRows === 0) {
-        return res.status(404).json('Request not found');
-      }
-      return res.json('Request status updated successfully');
-    });
-  });
+    return res.json("Request status updated successfully");
+  } catch (error) {
+    console.error("Error in updateRequestStatus:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Recycle Bins
 // All recycle Bins
-const fetchAllRecycleBins = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+const fetchAllRecycleBins = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', async (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
-
-    // Check if the user is an administrator
+    const userInfo = jwt.verify(token, "jwtkey");
     if (userInfo.role !== 1) {
       return res
         .status(403)
-        .json('You are not authorized to access this resource');
+        .json("You are not authorized to access this resource");
     }
 
     const { type } = req.query;
+    const query = type
+      ? "SELECT * FROM markers WHERE type = ?"
+      : "SELECT * FROM markers";
 
-    let selectQuery = 'SELECT * FROM markers';
-    const queryParams = [];
+    const data = await executeQuery(query, type ? [type] : []);
 
-    if (type) {
-      selectQuery += ' WHERE type = ?';
-      queryParams.push(type);
-    }
-
-    db.query(selectQuery, queryParams, (err, data) => {
-      if (err) return res.status(500).json(err);
-      return res.json(data);
-    });
-  });
+    return res.json(data);
+  } catch (error) {
+    console.error("Error in fetchAllRecycleBins:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Deactivate Bin
-const deactivateBin = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+const deactivateBin = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
-
-    // Check if the user is an administrator
+    const userInfo = jwt.verify(token, "jwtkey");
     if (userInfo.role !== 1) {
       return res
         .status(403)
-        .json('You are not authorized to access this resource');
+        .json("You are not authorized to access this resource");
     }
 
     const { binId } = req.params;
 
-    const updateQuery = 'UPDATE markers SET active = 0 WHERE id = ?';
+    const updateQuery = "UPDATE markers SET active = 0 WHERE id = ?";
+    const result = await executeQuery(updateQuery, [binId]);
 
-    db.query(updateQuery, [binId], (err, result) => {
-      if (err) return res.status(500).json(err);
-      if (result.affectedRows === 0) {
-        return res.status(404).json('Bin not found');
-      }
-      return res.json('Bin deactivated successfully');
-    });
-  });
+    if (result.affectedRows === 0) {
+      return res.status(404).json("Bin not found");
+    }
+
+    return res.json("Bin deactivated successfully");
+  } catch (error) {
+    console.error("Error in deactivateBin:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Activate Bin
-const activateBin = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+const activateBin = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
-
-    // Check if the user is an administrator
+    const userInfo = jwt.verify(token, "jwtkey");
     if (userInfo.role !== 1) {
       return res
         .status(403)
-        .json('You are not authorized to access this resource');
+        .json("You are not authorized to access this resource");
     }
 
     const { binId } = req.params;
 
-    const updateQuery = 'UPDATE markers SET active = 1 WHERE id = ?';
+    const updateQuery = "UPDATE markers SET active = 1 WHERE id = ?";
+    const result = await executeQuery(updateQuery, [binId]);
 
-    db.query(updateQuery, [binId], (err, result) => {
-      if (err) return res.status(500).json(err);
-      if (result.affectedRows === 0) {
-        return res.status(404).json('Bin not found');
-      }
-      return res.json('Bin deactivated successfully');
-    });
-  });
+    if (result.affectedRows === 0) {
+      return res.status(404).json("Bin not found");
+    }
+
+    return res.json("Bin activated successfully");
+  } catch (error) {
+    console.error("Error in activateBin:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Update Bin
 // Get bin by id
-const getBinById = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+const getBinById = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, decoded) => {
-    if (err) return res.status(403).json('Token is not valid');
-
-    const userRole = decoded.role;
-    if (userRole === 1) {
-      const q = 'SELECT * FROM markers WHERE id = ?';
-
-      db.query(q, [req.params.binId], (err, data) => {
-        if (err) return res.status(500).send(err);
-        if (data.length === 0) {
-          return res.status(404).json('Bin not found');
-        }
-
-        return res.status(200).json(data[0]);
-      });
-    } else {
-      return res.status(403).json('Invalid user role');
+    const decoded = jwt.verify(token, "jwtkey");
+    if (decoded.role !== 1) {
+      return res.status(403).json("Invalid user role");
     }
-  });
+
+    const query = "SELECT * FROM markers WHERE id = ?";
+    const result = await executeQuery(query, [req.params.binId]);
+    console.log(result);
+
+    if (result.length === 0) {
+      return res.status(404).json("Bin not found");
+    }
+
+    return res.status(200).json(result[0]);
+  } catch (error) {
+    console.error("Error in getBinById:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Update an existing bin
-const updateBin = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+const updateBin = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
-
-    // Check if the user is an administrator
+    const userInfo = jwt.verify(token, "jwtkey");
     if (userInfo.role !== 1) {
       return res
         .status(403)
-        .json('You are not authorized to access this resource');
+        .json("You are not authorized to access this resource");
     }
 
     const { binId } = req.params;
-    const updatedData = req.body; // Updated data sent from frontend
-    console.log('Bin ID:', binId);
-    console.log('Updated Data:', updatedData);
+    const updatedData = req.body;
+
+    console.log("Bin ID:", binId);
+    console.log("Updated Data:", updatedData);
 
     // Round the lat and lng values to a specific precision (e.g., 6 decimal places)
     const precision = 6;
@@ -377,59 +351,70 @@ const updateBin = (req, res) => {
     const roundedLng = Number(updatedData.lng).toFixed(precision);
 
     // Check if a bin with the same Latitude, Longitude, and type already exists
-    const existingBinQuery =
-      'SELECT COUNT(*) AS binCount FROM markers WHERE ROUND(lat, ?) = ? AND ROUND(lng, ?) = ? AND type = ? AND id <> ?';
-    db.query(
-      existingBinQuery,
-      [precision, roundedLat, precision, roundedLng, updatedData.type, binId],
-      (err, existingBinData) => {
-        if (err) return res.status(500).json(err);
+    const existingBinQuery = `
+      SELECT COUNT(*) AS binCount FROM markers 
+      WHERE ROUND(lat, ?) = ? 
+      AND ROUND(lng, ?) = ? 
+      AND type = ? 
+      AND id <> ?
+    `;
 
-        if (existingBinData[0].binCount > 0) {
-          return res
-            .status(400)
-            .json('A bin with this address and type already exists');
-        }
+    const existingBinData = await executeQuery(existingBinQuery, [
+      precision,
+      roundedLat,
+      precision,
+      roundedLng,
+      updatedData.type,
+      binId,
+    ]);
 
-        // If no matching bin found, proceed to update the bin
-        const updateQuery =
-          'UPDATE markers SET address = ?, city = ?, lat = ?, lng = ?, type = ?, last_modified = ? WHERE id = ?';
+    if (existingBinData[0].binCount > 0) {
+      return res
+        .status(400)
+        .json("A bin with this address and type already exists");
+    }
 
-        const values = [
-          updatedData.address || null,
-          updatedData.city || null,
-          updatedData.lat || null,
-          updatedData.lng || null,
-          updatedData.type || null,
-          new Date(),
-          binId,
-        ];
+    // If no matching bin found, proceed to update the bin
+    const updateQuery = `
+      UPDATE markers 
+      SET address = ?, city = ?, lat = ?, lng = ?, type = ?, last_modified = ?
+      WHERE id = ?
+    `;
 
-        db.query(updateQuery, values, (err, result) => {
-          if (err) return res.status(500).json(err);
-          if (result.affectedRows === 0) {
-            return res.status(404).json('Bin not found');
-          }
-          return res.json('Bin updated successfully');
-        });
-      }
-    );
-  });
+    const values = [
+      updatedData.address || null,
+      updatedData.city || null,
+      roundedLat || null,
+      roundedLng || null,
+      updatedData.type || null,
+      new Date(),
+      binId,
+    ];
+
+    const result = await executeQuery(updateQuery, values);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json("Bin not found");
+    }
+
+    return res.json("Bin updated successfully");
+  } catch (error) {
+    console.error("Error in updateBin:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Add New Bin
-const addNewBin = (req, res) => {
-  const token = req.cookies.access_token;
-  if (!token) return res.status(401).json('Not authenticated');
+const addNewBin = async (req, res) => {
+  try {
+    const token = req.cookies.access_token;
+    if (!token) return res.status(401).json("Not authenticated");
 
-  jwt.verify(token, 'jwtkey', (err, userInfo) => {
-    if (err) return res.status(403).json('Token is not valid!');
-
-    // Check if the user is an administrator
+    const userInfo = jwt.verify(token, "jwtkey");
     if (userInfo.role !== 1) {
       return res
         .status(403)
-        .json('You are not authorized to access this resource');
+        .json("You are not authorized to access this resource");
     }
 
     const { address, city, lat, lng, type } = req.body;
@@ -440,39 +425,47 @@ const addNewBin = (req, res) => {
     const lngFixed = parseFloat(lng).toFixed(precision);
 
     // Check if any bins with the same Latitude, Longitude, and type already exist
-    const existingBinQuery =
-      'SELECT COUNT(*) AS binCount FROM markers WHERE lat = ? AND lng = ? AND type = ?';
-    db.query(existingBinQuery, [latFixed, lngFixed, type], (err, result) => {
-      if (err) return res.status(500).json(err);
+    const existingBinQuery = `
+      SELECT COUNT(*) AS binCount 
+      FROM markers 
+      WHERE lat = ? AND lng = ? AND type = ?
+    `;
 
-      const binCount = result[0].binCount;
+    const existingBinData = await executeQuery(existingBinQuery, [
+      latFixed,
+      lngFixed,
+      type,
+    ]);
 
-      if (binCount > 0) {
-        return res
-          .status(400)
-          .json({ error: 'A bin with this address and type already exists' });
-      }
+    if (existingBinData[0].binCount > 0) {
+      return res
+        .status(400)
+        .json({ error: "A bin with this address and type already exists" });
+    }
 
-      // If no matching bin found, proceed to insert the new bin
-      const insertQuery =
-        'INSERT INTO markers (address, city, lat, lng, type, active, last_modified) VALUES (?, ?, ?, ?, ?, ?, ?)';
+    // If no matching bin found, proceed to insert the new bin
+    const insertQuery = `
+      INSERT INTO markers (address, city, lat, lng, type, active, last_modified) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
 
-      const values = [
-        address || null,
-        city || null,
-        latFixed || null,
-        lngFixed || null,
-        type || null,
-        1, // Set as active
-        new Date(),
-      ];
+    const values = [
+      address || null,
+      city || null,
+      latFixed || null,
+      lngFixed || null,
+      type || null,
+      1, // Set as active
+      new Date(),
+    ];
 
-      db.query(insertQuery, values, (err, result) => {
-        if (err) return res.status(500).json(err);
-        return res.json('Bin added successfully');
-      });
-    });
-  });
+    await executeQuery(insertQuery, values);
+
+    return res.json("Bin added successfully");
+  } catch (error) {
+    console.error("Error in addNewBin:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 module.exports = {
