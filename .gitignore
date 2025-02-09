@@ -3,3 +3,6 @@
 
 # Modules
 /node_modules
+
+# Logs
+db_logs.txt
