@@ -85,7 +85,7 @@ const login = (req, res) => {
         sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax", // ✅ "None" allows cross-site cookies in production
         domain:
           process.env.NODE_ENV === "production"
-            ? ".https://ecocollectors-api-production.up.railway.app"
+            ? ".ecocollectors-api-production.up.railway.app"
             : undefined, // ✅ Optional for subdomains
       })
       .status(200)
