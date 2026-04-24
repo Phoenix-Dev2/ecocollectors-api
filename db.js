@@ -2,11 +2,11 @@ const mysql2 = require("mysql2");
 const fs = require("fs");
 
 const db = mysql2.createPool({
-  host: "phoenixdev.helioho.st",
-  port: 3306,
-  user: "phoenixdev_admin",
-  password: "uWK@hr8Xnm6tyau",
-  database: "phoenixdev_ecocollectors",
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT || 3306,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_NAME,
   waitForConnections: true,
   connectionLimit: 3,
   queueLimit: 0,

@@ -6,3 +6,6 @@
 
 # Logs
 db_logs.txt
+
+# Database configuration (contains secrets)
+db.js
