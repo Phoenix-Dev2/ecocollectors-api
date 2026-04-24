@@ -10,57 +10,39 @@ const WelcomeManagerData = async (req, res) => {
 
     // Define queries
     const queries = {
-      totalPickedUpRequests: `
-        SELECT COUNT(*) AS totalPickedUpRequests 
-        FROM user_requests 
-        WHERE recycler_id IS NOT NULL
+      stats: `
+        SELECT 
+          COUNT(CASE WHEN recycler_id IS NOT NULL THEN 1 END) AS totalPickedUpRequests,
+          SUM(CASE WHEN recycler_id IS NOT NULL THEN bottles_number ELSE 0 END) AS totalRecycledBottles,
+          AVG(CASE WHEN recycler_id IS NOT NULL AND completed_date IS NOT NULL THEN TIMESTAMPDIFF(SECOND, request_date, completed_date) END) AS avgClosingTime,
+          SUM(CASE WHEN recycler_id IS NOT NULL AND completed_date IS NOT NULL AND YEAR(completed_date) = YEAR(NOW()) AND MONTH(completed_date) = MONTH(NOW()) THEN bottles_number ELSE 0 END) AS currentMonthCollectedBottles,
+          (SELECT COUNT(*) FROM markers WHERE active = 1) AS activeBinsCount
+        FROM user_requests
       `,
-      totalRecycledBottles: `
-        SELECT SUM(bottles_number) AS totalRecycledBottles 
-        FROM user_requests 
-        WHERE recycler_id IS NOT NULL
-      `,
-      avgClosingTime: `
-        SELECT AVG(TIMESTAMPDIFF(SECOND, request_date, completed_date)) AS avgClosingTime 
-        FROM user_requests 
-        WHERE recycler_id IS NOT NULL 
-        AND completed_date IS NOT NULL
-      `,
-      currentMonthCollectedBottles: `
-        SELECT SUM(bottles_number) AS currentMonthCollectedBottles 
-        FROM user_requests 
-        WHERE recycler_id IS NOT NULL 
-        AND completed_date IS NOT NULL 
-        AND YEAR(completed_date) = YEAR(NOW()) 
-        AND MONTH(completed_date) = MONTH(NOW())
-      `,
-      last3CompletedRequests: `
+      last3Completed: `
         SELECT full_name, req_address, bottles_number 
         FROM user_requests 
         WHERE completed_date IS NOT NULL 
         ORDER BY completed_date DESC 
         LIMIT 3
       `,
-      activeBinsCount: `
-        SELECT COUNT(*) AS activeBinsCount 
-        FROM markers 
-        WHERE active = 1
-      `,
     };
 
-    // Execute all queries concurrently
-    const results = await Promise.all(
-      Object.values(queries).map((query) => executeQuery(query))
-    );
+    // Execute queries concurrently (now only 2 instead of 6)
+    const results = await Promise.all([
+      executeQuery(queries.stats),
+      executeQuery(queries.last3Completed)
+    ]);
 
     // Extract results
-    const totalPickedUpRequests = results[0][0].totalPickedUpRequests || 0;
-    const totalRecycledBottles = results[1][0].totalRecycledBottles || 0;
-    const avgClosingTimeInSeconds = results[2][0].avgClosingTime || 0;
-    const currentMonthCollectedBottles =
-      results[3][0].currentMonthCollectedBottles || 0;
-    const last3CompletedRequests = results[4] || [];
-    const activeBinsCount = results[5][0].activeBinsCount || 0;
+    const stats = results[0][0] || {};
+    const totalPickedUpRequests = stats.totalPickedUpRequests || 0;
+    const totalRecycledBottles = stats.totalRecycledBottles || 0;
+    const avgClosingTimeInSeconds = stats.avgClosingTime || 0;
+    const currentMonthCollectedBottles = stats.currentMonthCollectedBottles || 0;
+    const activeBinsCount = stats.activeBinsCount || 0;
+    
+    const last3CompletedRequests = results[1] || [];
 
     // Convert avgClosingTime from seconds to days, hours, and minutes
     const avgClosingTimeInMinutes = Math.floor(avgClosingTimeInSeconds / 60);
@@ -78,6 +60,9 @@ const WelcomeManagerData = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching manager data:", error);
+    if (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError") {
+      return res.status(401).json("Invalid or expired token");
+    }
     return res.status(500).json("Internal server error");
   }
 };

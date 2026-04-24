@@ -11,31 +11,16 @@ const WelcomeRecyclerData = async (req, res) => {
 
     // Define queries
     const queries = {
-      totalRequestsPickedUp: `
-        SELECT COUNT(*) AS totalRequestsPickedUp 
-        FROM user_requests 
-        WHERE recycler_id = ?
+      stats: `
+        SELECT 
+          COUNT(CASE WHEN recycler_id = ? THEN 1 END) AS totalRequestsPickedUp,
+          SUM(CASE WHEN recycler_id = ? THEN bottles_number ELSE 0 END) AS totalRecycledBottles,
+          AVG(CASE WHEN recycler_id = ? AND completed_date IS NOT NULL THEN TIMESTAMPDIFF(SECOND, request_date, completed_date) END) AS avgClosingTime,
+          SUM(CASE WHEN recycler_id = ? AND completed_date IS NOT NULL AND YEAR(completed_date) = YEAR(NOW()) AND MONTH(completed_date) = MONTH(NOW()) THEN bottles_number ELSE 0 END) AS currentMonthRecycledBottles,
+          (SELECT COUNT(*) FROM user_requests WHERE status = 1) AS openRequests
+        FROM user_requests
       `,
-      totalRecycledBottles: `
-        SELECT SUM(bottles_number) AS totalRecycledBottles 
-        FROM user_requests 
-        WHERE recycler_id = ?
-      `,
-      avgClosingTime: `
-        SELECT AVG(TIMESTAMPDIFF(SECOND, request_date, completed_date)) AS avgClosingTime 
-        FROM user_requests 
-        WHERE recycler_id = ? 
-        AND completed_date IS NOT NULL
-      `,
-      currentMonthRecycledBottles: `
-        SELECT SUM(bottles_number) AS currentMonthRecycledBottles 
-        FROM user_requests 
-        WHERE recycler_id = ? 
-        AND completed_date IS NOT NULL 
-        AND YEAR(completed_date) = YEAR(NOW()) 
-        AND MONTH(completed_date) = MONTH(NOW())
-      `,
-      last3UsersNames: `
+      last3Users: `
         SELECT full_name 
         FROM user_requests 
         WHERE completed_date IS NOT NULL 
@@ -43,26 +28,23 @@ const WelcomeRecyclerData = async (req, res) => {
         ORDER BY completed_date DESC 
         LIMIT 3
       `,
-      openRequests: `
-        SELECT COUNT(*) AS openRequests 
-        FROM user_requests 
-        WHERE status = 1
-      `,
     };
 
-    // Execute all queries concurrently
-    const results = await Promise.all(
-      Object.values(queries).map((query) => executeQuery(query, [userId]))
-    );
+    // Execute queries concurrently (now only 2 instead of 6)
+    const results = await Promise.all([
+      executeQuery(queries.stats, [userId, userId, userId, userId]),
+      executeQuery(queries.last3Users, [userId])
+    ]);
 
     // Extract results
-    const totalRequestsPickedUp = results[0][0]?.totalRequestsPickedUp || 0;
-    const totalRecycledBottles = results[1][0]?.totalRecycledBottles || 0;
-    const avgClosingTimeInSeconds = results[2][0]?.avgClosingTime || 0;
-    const currentMonthRecycledBottles =
-      results[3][0]?.currentMonthRecycledBottles || 0;
-    const last3UsersNames = results[4] || [];
-    const openRequests = results[5][0]?.openRequests || 0;
+    const stats = results[0][0] || {};
+    const totalRequestsPickedUp = stats.totalRequestsPickedUp || 0;
+    const totalRecycledBottles = stats.totalRecycledBottles || 0;
+    const avgClosingTimeInSeconds = stats.avgClosingTime || 0;
+    const currentMonthRecycledBottles = stats.currentMonthRecycledBottles || 0;
+    const openRequests = stats.openRequests || 0;
+    
+    const last3UsersNames = results[1] || [];
 
     // Convert avgClosingTime from seconds to days, hours, and minutes
     const avgClosingTimeInMinutes = Math.floor(avgClosingTimeInSeconds / 60);
@@ -80,6 +62,9 @@ const WelcomeRecyclerData = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching recycler data:", error);
+    if (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError") {
+      return res.status(401).json("Invalid or expired token");
+    }
     return res.status(500).json("Internal server error");
   }
 };

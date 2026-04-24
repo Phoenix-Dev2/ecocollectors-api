@@ -11,29 +11,16 @@ const WelcomeUserData = async (req, res) => {
 
     // Define queries
     const queries = {
-      totalRequests: `
-        SELECT COUNT(*) AS totalRequests 
+      stats: `
+        SELECT 
+          COUNT(*) AS totalRequests,
+          SUM(bottles_number) AS totalRecycledBottles,
+          AVG(CASE WHEN completed_date IS NOT NULL THEN TIMESTAMPDIFF(SECOND, request_date, completed_date) END) AS avgClosingTime,
+          COUNT(CASE WHEN status = 3 THEN 1 END) AS totalCompletedRequests
         FROM user_requests 
         WHERE user_id = ?
       `,
-      totalRecycledBottles: `
-        SELECT SUM(bottles_number) AS totalRecycledBottles 
-        FROM user_requests 
-        WHERE user_id = ?
-      `,
-      avgClosingTime: `
-        SELECT AVG(TIMESTAMPDIFF(SECOND, request_date, completed_date)) AS avgClosingTime 
-        FROM user_requests 
-        WHERE user_id = ? 
-        AND completed_date IS NOT NULL
-      `,
-      totalCompletedRequests: `
-        SELECT COUNT(*) AS totalCompletedRequests 
-        FROM user_requests 
-        WHERE status = 3 
-        AND user_id = ?
-      `,
-      last3RecyclersNames: `
+      last3Recyclers: `
         SELECT full_name 
         FROM user_requests 
         WHERE completed_date IS NOT NULL 
@@ -41,7 +28,7 @@ const WelcomeUserData = async (req, res) => {
         ORDER BY completed_date DESC 
         LIMIT 3
       `,
-      currentMonthRecycledBottles: `
+      currentMonthStats: `
         SELECT SUM(bottles_number) AS currentMonthRecycledBottles 
         FROM user_requests 
         WHERE recycler_id IS NOT NULL 
@@ -52,19 +39,22 @@ const WelcomeUserData = async (req, res) => {
       `,
     };
 
-    // Execute all queries concurrently
-    const results = await Promise.all(
-      Object.values(queries).map((query) => executeQuery(query, [userId]))
-    );
+    // Execute queries concurrently (now only 3 instead of 6)
+    const results = await Promise.all([
+      executeQuery(queries.stats, [userId]),
+      executeQuery(queries.last3Recyclers, [userId]),
+      executeQuery(queries.currentMonthStats, [userId]),
+    ]);
 
     // Extract results
-    const totalRequests = results[0][0]?.totalRequests || 0;
-    const totalRecycledBottles = results[1][0]?.totalRecycledBottles || 0;
-    const avgClosingTimeInSeconds = results[2][0]?.avgClosingTime || 0;
-    const totalCompletedRequests = results[3][0]?.totalCompletedRequests || 0;
-    const last3RecyclersNames = results[4] || [];
-    const currentMonthRecycledBottles =
-      results[5][0]?.currentMonthRecycledBottles || 0;
+    const stats = results[0][0] || {};
+    const totalRequests = stats.totalRequests || 0;
+    const totalRecycledBottles = stats.totalRecycledBottles || 0;
+    const avgClosingTimeInSeconds = stats.avgClosingTime || 0;
+    const totalCompletedRequests = stats.totalCompletedRequests || 0;
+    
+    const last3RecyclersNames = results[1] || [];
+    const currentMonthRecycledBottles = results[2][0]?.currentMonthRecycledBottles || 0;
 
     // Convert avgClosingTime from seconds to days, hours, and minutes
     const avgClosingTimeInMinutes = Math.floor(avgClosingTimeInSeconds / 60);
@@ -82,6 +72,9 @@ const WelcomeUserData = async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching user data:", error);
+    if (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError") {
+      return res.status(401).json("Invalid or expired token");
+    }
     return res.status(500).json("Internal server error");
   }
 };

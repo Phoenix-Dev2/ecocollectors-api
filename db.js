@@ -8,7 +8,7 @@ const db = mysql2.createPool({
   password: "uWK@hr8Xnm6tyau",
   database: "phoenixdev_ecocollectors",
   waitForConnections: true,
-  connectionLimit: 50,
+  connectionLimit: 3,
   queueLimit: 0,
   ssl: {
     rejectUnauthorized: false,
