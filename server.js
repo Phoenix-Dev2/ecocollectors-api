@@ -24,11 +24,17 @@ const welcomeUser = require("./routes/welcomeUser.js");
 
 const port = process.env.PORT || 5432;
 
+// Enable trust proxy for secure cookies in production (Render/Vercel)
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 // CORS configuration
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://ecocollectors-client.vercel.app",
-];
+  process.env.CLIENT_URL,
+  process.env.CLIENT_URL_PROD,
+].filter(Boolean); // Remove undefined values
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -36,8 +42,16 @@ app.use(express.json());
 app.use(cookieParser());
 
 const corsOptions = {
-  origin: allowedOrigins, // Allowed frontend URLs
-  credentials: true, // Allow cookies to be sent
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = "The CORS policy for this site does not allow access from the specified Origin.";
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
 };
 app.use(cors(corsOptions));

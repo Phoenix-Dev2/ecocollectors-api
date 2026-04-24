@@ -85,11 +85,7 @@ const login = async (req, res) => {
       .cookie("access_token", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
-        domain:
-          process.env.NODE_ENV === "production"
-            ? ".ecocollectors-api-production.up.railway.app"
-            : undefined,
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       })
       .status(200)
       .json(other);
