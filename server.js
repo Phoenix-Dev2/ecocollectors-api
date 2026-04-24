@@ -60,6 +60,12 @@ app.use(cors(corsOptions));
 app.use(express.static(path.join(__dirname, "src")));
 app.use(express.static(path.join(__dirname, "public")));
 
+// Global Request Logger for Debugging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.get('origin')}`);
+  next();
+});
+
 // Routes
 app.use("/auth", authRoutes);
 app.use("/requests", requestsRoutes);
