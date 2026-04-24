@@ -3,7 +3,7 @@ const executeQuery = require("../dbHelper");
 
 const WelcomeManagerData = async (req, res) => {
   try {
-    const token = req.cookies.access_token;
+    const token = req.cookies.access_token || req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json("Not authenticated");
 
     jwt.verify(token, "jwtkey");

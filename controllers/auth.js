@@ -88,7 +88,7 @@ const login = async (req, res) => {
         sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       })
       .status(200)
-      .json(other);
+      .json({ ...other, token });
   } catch (error) {
     console.error("Error in login:", error);
     return res.status(500).json({ error: "Internal Server Error" });
