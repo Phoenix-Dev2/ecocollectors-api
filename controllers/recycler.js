@@ -7,7 +7,7 @@ const fetchAllRequests = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
 
     if (userInfo.role !== 3) {
       return res
@@ -45,7 +45,7 @@ const fetchAcceptedRequests = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
 
     if (userInfo.role !== 3) {
       return res
@@ -74,7 +74,7 @@ const updateRequestStatus = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
 
     if (userInfo.role !== 3) {
       return res
@@ -111,7 +111,7 @@ const fetchCompletedRequests = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
 
     if (userInfo.role !== 3) {
       return res

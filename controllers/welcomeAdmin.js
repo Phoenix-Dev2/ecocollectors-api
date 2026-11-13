@@ -6,7 +6,7 @@ const getWelcomeAdminData = async (req, res) => {
     const token = req.cookies.access_token || req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json("Not authenticated");
 
-    const decodedToken = jwt.verify(token, "jwtkey");
+    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
 
     // Define queries
     const queries = {

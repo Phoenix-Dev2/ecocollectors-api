@@ -27,7 +27,7 @@ const getRequest = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const decoded = jwt.verify(token, "jwtkey");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (![1, 2, 3, 4, 5].includes(decoded.role)) {
       return res.status(403).json("Invalid user role");
     }
@@ -48,7 +48,7 @@ const getRequestForRecycle = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const decoded = jwt.verify(token, "jwtkey");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (![1, 3, 4].includes(decoded.role)) {
       return res.status(403).json("Invalid user role");
     }
@@ -69,7 +69,7 @@ const addRequest = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const decoded = jwt.verify(token, "jwtkey");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userId = decoded.id;
     const reqStatus = 1;
     const reqType = "request";
@@ -108,7 +108,7 @@ const deleteRequest = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const decoded = jwt.verify(token, "jwtkey");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const requestId = req.params.id;
 
     const query =
@@ -132,7 +132,7 @@ const updateRequestType = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated!");
 
-    const decoded = jwt.verify(token, "jwtkey");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const requestId = req.params.id;
     const type = "pending";
     const status = 2;
@@ -164,7 +164,7 @@ const updateRequestByUser = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated!");
 
-    const decoded = jwt.verify(token, "jwtkey");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const requestId = req.params.id;
     const updatedData = req.body;
 
