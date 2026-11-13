@@ -7,7 +7,7 @@ const getAllUsers = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
     if (userInfo.role !== 1) {
       return res
         .status(403)
@@ -30,7 +30,7 @@ const toggleUserActivation = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
     if (userInfo.role !== 1) {
       return res
         .status(403)
@@ -62,7 +62,7 @@ const getAllJoinRequests = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
     if (userInfo.role !== 1) {
       return res
         .status(403)
@@ -88,7 +88,7 @@ const updateJoinRequestStatus = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
     if (userInfo.role !== 1) {
       return res
         .status(403)
@@ -127,7 +127,7 @@ const fetchAllRequests = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
     if (userInfo.role !== 1) {
       return res
         .status(403)
@@ -154,7 +154,7 @@ const searchRequests = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
     if (userInfo.role !== 1) {
       return res
         .status(403)
@@ -186,7 +186,7 @@ const updateRequestStatus = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
     if (userInfo.role !== 1) {
       return res
         .status(403)
@@ -220,7 +220,7 @@ const fetchAllRecycleBins = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
     if (userInfo.role !== 1) {
       return res
         .status(403)
@@ -247,7 +247,7 @@ const deactivateBin = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
     if (userInfo.role !== 1) {
       return res
         .status(403)
@@ -276,7 +276,7 @@ const activateBin = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
     if (userInfo.role !== 1) {
       return res
         .status(403)
@@ -306,7 +306,7 @@ const getBinById = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const decoded = jwt.verify(token, "jwtkey");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (decoded.role !== 1) {
       return res.status(403).json("Invalid user role");
     }
@@ -332,7 +332,7 @@ const updateBin = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
     if (userInfo.role !== 1) {
       return res
         .status(403)
@@ -410,7 +410,7 @@ const addNewBin = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
     if (userInfo.role !== 1) {
       return res
         .status(403)

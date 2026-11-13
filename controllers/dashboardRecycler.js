@@ -6,7 +6,7 @@ const getRecyclerDetails = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const decoded = jwt.verify(token, "jwtkey");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const recyclerId = req.params.id; // Assuming recycler ID is passed as a route parameter
 

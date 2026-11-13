@@ -9,7 +9,7 @@ const updateUser = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const userInfo = jwt.verify(token, "jwtkey");
+    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
 
     // Check if email already exists for another user
     const emailCheckQuery = "SELECT * FROM users WHERE email = ? AND ID != ?";
@@ -54,7 +54,7 @@ const changePassword = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const decodedToken = jwt.verify(token, "jwtkey");
+    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
     const { old_password, new_password } = req.body;
     const userId = decodedToken.id;
 
@@ -98,7 +98,7 @@ const getUserInfo = async (req, res) => {
     const token = req.cookies.access_token || req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json("Not authenticated");
 
-    const decodedToken = jwt.verify(token, "jwtkey");
+    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
     const userId = decodedToken.id;
 
     const query = "SELECT * FROM users WHERE ID = ?";
@@ -119,7 +119,7 @@ const getUserRole = async (req, res) => {
     const token = req.cookies.access_token || req.headers.authorization?.split(" ")[1];
     if (!token) return res.status(401).json({ message: "No token found" });
 
-    const decodedToken = jwt.verify(token, "jwtkey");
+    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
     return res.status(200).json({ role: decodedToken.role });
   } catch (error) {
     console.error("Token verification failed:", error);
@@ -133,7 +133,7 @@ const deactivateAccount = async (req, res) => {
     const token = req.cookies.access_token;
     if (!token) return res.status(401).json("Not authenticated");
 
-    const decodedToken = jwt.verify(token, "jwtkey");
+    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
     const userId = decodedToken.id;
 
     const updateQuery = "UPDATE users SET active = 0 WHERE ID = ?";

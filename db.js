@@ -10,9 +10,14 @@ const db = mysql2.createPool({
   waitForConnections: true,
   connectionLimit: 3,
   queueLimit: 0,
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  // TLS stays on by default (HelioHost/TiDB). DB_SSL=false turns it off for a database on the same
+  // private Docker network (the Raspberry Pi setup), where the connection never leaves the machine.
+  ssl:
+    process.env.DB_SSL === "false"
+      ? undefined
+      : {
+          rejectUnauthorized: false,
+        },
 });
 
 // Check database connection
@@ -40,19 +45,27 @@ const logQuery = (query, params) => {
   });
 };
 
+// Query logging is for local development only. In production it would write every query WITH its
+// parameters (e-mails, etc.) to the console and to db_logs.txt, a file that grows forever.
+const LOG_QUERIES = process.env.NODE_ENV === "development";
+
 // Override the db.query function to log all queries
-const originalQuery = db.query;
-db.query = function (sql, params, callback) {
-  logQuery(sql, params); // Log the query
-  return originalQuery.call(db, sql, params, callback);
-};
+if (LOG_QUERIES) {
+  const originalQuery = db.query;
+  db.query = function (sql, params, callback) {
+    logQuery(sql, params); // Log the query
+    return originalQuery.call(db, sql, params, callback);
+  };
+}
 
 // Override the promise-based query method as well
 const dbPromise = db.promise();
-const originalExecute = dbPromise.execute;
-dbPromise.execute = function (sql, params) {
-  logQuery(sql, params); // Log the query
-  return originalExecute.call(dbPromise, sql, params);
-};
+if (LOG_QUERIES) {
+  const originalExecute = dbPromise.execute;
+  dbPromise.execute = function (sql, params) {
+    logQuery(sql, params); // Log the query
+    return originalExecute.call(dbPromise, sql, params);
+  };
+}
 
 module.exports = dbPromise;
