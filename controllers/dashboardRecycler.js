@@ -1,25 +1,29 @@
 const executeQuery = require("../dbHelper");
-const jwt = require("jsonwebtoken");
+const { ROLE } = require("../constants");
+const { HttpError, asyncHandlers, toId } = require("../lib/http");
 
+// Name and phone of the recycler handling one of the caller's requests.
 const getRecyclerDetails = async (req, res) => {
-  try {
-    const token = req.cookies.access_token;
-    if (!token) return res.status(401).json("Not authenticated");
+  const recyclerId = toId(req.params.id);
+  // The client also asks for requests without a recycler (".../null"): nothing to show.
+  if (!recyclerId) return res.status(200).json([]);
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    const recyclerId = req.params.id; // Assuming recycler ID is passed as a route parameter
-
-    const q = "SELECT first_name, last_name, phone FROM users WHERE ID = ?";
-    const data = await executeQuery(q, [recyclerId]);
-
-    return res.status(200).json(data);
-  } catch (error) {
-    console.error("Error in getRecyclerDetails:", error);
-    return res.status(500).json({ error: "Internal Server Error" });
+  const { id, role } = req.user;
+  let allowed = recyclerId === id || role === ROLE.ADMIN || role === ROLE.MANAGER;
+  if (!allowed) {
+    const rows = await executeQuery(
+      "SELECT 1 FROM user_requests WHERE user_id = ? AND recycler_id = ? LIMIT 1",
+      [id, recyclerId]
+    );
+    allowed = rows.length > 0;
   }
+  if (!allowed) throw new HttpError(403, "You can see only the recyclers of your own requests");
+
+  const data = await executeQuery(
+    "SELECT first_name, last_name, phone FROM users WHERE ID = ?",
+    [recyclerId]
+  );
+  return res.status(200).json(data);
 };
 
-module.exports = {
-  getRecyclerDetails: getRecyclerDetails,
-};
+module.exports = asyncHandlers({ getRecyclerDetails });

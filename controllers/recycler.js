@@ -1,142 +1,90 @@
 const executeQuery = require("../dbHelper");
-const jwt = require("jsonwebtoken");
+const { STATUS } = require("../constants");
+const { HttpError, asyncHandlers, toId, toInt } = require("../lib/http");
 
-// Fetch all requests for recyclers
+// Fetch all requests for recyclers (route: recyclers only)
 const fetchAllRequests = async (req, res) => {
-  try {
-    const token = req.cookies.access_token;
-    if (!token) return res.status(401).json("Not authenticated");
+  const { status } = req.query;
 
-    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
+  let selectQuery = `
+    SELECT user_requests.*,
+           users.first_name AS recycler_first_name,
+           users.last_name AS recycler_last_name
+    FROM user_requests
+    LEFT JOIN users ON user_requests.recycler_id = users.ID`;
 
-    if (userInfo.role !== 3) {
-      return res
-        .status(403)
-        .json("You are not authorized to access this resource");
-    }
+  const queryParams = [];
 
-    const { status } = req.query;
-
-    let selectQuery = `
-      SELECT user_requests.*, 
-             users.first_name AS recycler_first_name, 
-             users.last_name AS recycler_last_name 
-      FROM user_requests 
-      LEFT JOIN users ON user_requests.recycler_id = users.ID`;
-
-    const queryParams = [];
-
-    if (status) {
-      selectQuery += " WHERE user_requests.status = ?";
-      queryParams.push(status);
-    }
-
-    const data = await executeQuery(selectQuery, queryParams);
-    return res.status(200).json(data);
-  } catch (error) {
-    console.error("Error in fetchAllRequests:", error);
-    return res.status(500).json({ error: "Internal Server Error" });
+  if (status) {
+    selectQuery += " WHERE user_requests.status = ?";
+    queryParams.push(status);
   }
+
+  const data = await executeQuery(selectQuery, queryParams);
+  return res.status(200).json(data);
 };
 
-// Fetch accepted requests for recyclers
+// The recycler's claimed requests (awaiting approval or pickup)
 const fetchAcceptedRequests = async (req, res) => {
-  try {
-    const token = req.cookies.access_token;
-    if (!token) return res.status(401).json("Not authenticated");
+  const selectQuery = `
+    SELECT ur.*, CONCAT(u.first_name, ' ', u.last_name) AS recycler_name
+    FROM user_requests ur
+    LEFT JOIN users u ON ur.recycler_id = u.ID
+    WHERE ur.recycler_id = ? AND (ur.status = ? OR ur.status = ?)
+  `;
 
-    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
-
-    if (userInfo.role !== 3) {
-      return res
-        .status(403)
-        .json("You are not authorized to access this resource");
-    }
-
-    const selectQuery = `
-      SELECT ur.*, CONCAT(u.first_name, ' ', u.last_name) AS recycler_name
-      FROM user_requests ur
-      LEFT JOIN users u ON ur.recycler_id = u.ID
-      WHERE ur.recycler_id = ? AND (ur.status = 2 OR ur.status = 5)
-    `;
-
-    const data = await executeQuery(selectQuery, [userInfo.id]);
-    return res.status(200).json(data);
-  } catch (error) {
-    console.error("Error in fetchAcceptedRequests:", error);
-    return res.status(500).json({ error: "Internal Server Error" });
-  }
+  const data = await executeQuery(selectQuery, [
+    req.user.id,
+    STATUS.AWAITS_APPROVAL,
+    STATUS.AWAITS_PICKUP,
+  ]);
+  return res.status(200).json(data);
 };
 
-// Update request status (cancel request)
+// The recycler gives back a request they claimed: it goes back to "awaits recycler".
 const updateRequestStatus = async (req, res) => {
-  try {
-    const token = req.cookies.access_token;
-    if (!token) return res.status(401).json("Not authenticated");
-
-    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
-
-    if (userInfo.role !== 3) {
-      return res
-        .status(403)
-        .json("You are not authorized to access this resource");
-    }
-
-    const { requestId } = req.params;
-    const { status } = req.body;
-    const type = "request";
-
-    const updateQuery = `
-      UPDATE user_requests 
-      SET recycler_id = NULL, status = ?, type = ? 
-      WHERE request_id = ?
-    `;
-
-    const result = await executeQuery(updateQuery, [status, type, requestId]);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json("Request not found");
-    }
-
-    return res.status(200).json("Request status updated successfully");
-  } catch (error) {
-    console.error("Error in updateRequestStatus:", error);
-    return res.status(500).json({ error: "Internal Server Error" });
+  const requestId = toId(req.params.requestId);
+  const body = req.body || {};
+  if (body.status !== undefined && toInt(body.status) !== STATUS.AWAITS_RECYCLER) {
+    throw new HttpError(400, "A recycler can only give a request back (status 1)");
   }
+
+  const result = await executeQuery(
+    `UPDATE user_requests
+     SET recycler_id = NULL, status = ?, type = 'request', completed_date = NULL
+     WHERE request_id = ? AND recycler_id = ? AND status IN (?, ?)`,
+    [
+      STATUS.AWAITS_RECYCLER,
+      requestId,
+      req.user.id,
+      STATUS.AWAITS_APPROVAL,
+      STATUS.AWAITS_PICKUP,
+    ]
+  );
+
+  if (result.affectedRows === 0) {
+    throw new HttpError(404, "Request not found among your accepted requests");
+  }
+
+  return res.status(200).json("Request status updated successfully");
 };
 
-// fetch recycler completed requests
+// The recycler's completed requests
 const fetchCompletedRequests = async (req, res) => {
-  try {
-    const token = req.cookies.access_token;
-    if (!token) return res.status(401).json("Not authenticated");
+  const selectQuery = `
+    SELECT ur.*, CONCAT(u.first_name, ' ', u.last_name) AS recycler_name
+    FROM user_requests ur
+    LEFT JOIN users u ON ur.recycler_id = u.ID
+    WHERE ur.recycler_id = ? AND ur.status = ?
+  `;
 
-    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
-
-    if (userInfo.role !== 3) {
-      return res
-        .status(403)
-        .json("You are not authorized to access this resource");
-    }
-
-    const selectQuery = `
-      SELECT ur.*, CONCAT(u.first_name, ' ', u.last_name) AS recycler_name
-      FROM user_requests ur
-      LEFT JOIN users u ON ur.recycler_id = u.ID
-      WHERE ur.recycler_id = ? AND ur.status = 3
-    `;
-
-    const data = await executeQuery(selectQuery, [userInfo.id]);
-    return res.status(200).json(data);
-  } catch (error) {
-    console.error("Error in fetchCompletedRequests:", error);
-    return res.status(500).json({ error: "Internal Server Error" });
-  }
+  const data = await executeQuery(selectQuery, [req.user.id, STATUS.COMPLETED]);
+  return res.status(200).json(data);
 };
 
-module.exports = {
-  fetchAllRequests: fetchAllRequests,
-  fetchAcceptedRequests: fetchAcceptedRequests,
-  updateRequestStatus: updateRequestStatus,
-  fetchCompletedRequests: fetchCompletedRequests,
-};
+module.exports = asyncHandlers({
+  fetchAllRequests,
+  fetchAcceptedRequests,
+  updateRequestStatus,
+  fetchCompletedRequests,
+});

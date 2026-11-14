@@ -1,13 +1,8 @@
-const jwt = require("jsonwebtoken");
 const executeQuery = require("../dbHelper");
 
-const WelcomeRecyclerData = async (req, res) => {
+const WelcomeRecyclerData = async (req, res, next) => {
   try {
-    const token = req.cookies.access_token || req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json("Not authenticated");
-
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = decodedToken.id;
+    const userId = req.user.id;
 
     // Define queries
     const queries = {
@@ -61,11 +56,7 @@ const WelcomeRecyclerData = async (req, res) => {
       openRequests,
     });
   } catch (error) {
-    console.error("Error fetching recycler data:", error);
-    if (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError") {
-      return res.status(401).json("Invalid or expired token");
-    }
-    return res.status(500).json("Internal server error");
+    next(error);
   }
 };
 

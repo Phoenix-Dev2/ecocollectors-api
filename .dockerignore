@@ -1,0 +1,5 @@
+# The Pi builds the image from a `git archive` of this repo; the tests and docs aren't needed in it.
+test/
+README.md
+.gitignore
+.dockerignore

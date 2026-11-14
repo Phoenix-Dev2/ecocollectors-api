@@ -1,6 +1,10 @@
 const express = require('express');
 const managerControllers = require('../controllers/manager.js');
+const { requireAuth, requireRole } = require('../middleware/auth');
+const { ROLE } = require('../constants');
 const router = express.Router();
+
+router.use(requireAuth, requireRole(ROLE.MANAGER));
 
 // Recyclers Join requests
 router.get('/join-requests', managerControllers.fetchRecyclerJoinRequests);

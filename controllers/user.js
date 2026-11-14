@@ -1,194 +1,143 @@
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 const transporter = require("../nodeMailer.js");
 const executeQuery = require("../dbHelper");
+const { HttpError, asyncHandlers, normalizeEmail, escapeHtml } = require("../lib/http");
 
-// Update user details
+// Everything a client may see about its own account (never the password hash).
+const ACCOUNT_COLUMNS = "ID, role, first_name, last_name, email, city, address, phone, amount, active";
+
+// Update the logged-in user's details. Fields left out (or empty) keep their current value.
 const updateUser = async (req, res) => {
-  try {
-    const token = req.cookies.access_token;
-    if (!token) return res.status(401).json("Not authenticated");
+  const body = req.body || {};
+  const email = normalizeEmail(body.email) || null;
 
-    const userInfo = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Check if email already exists for another user
-    const emailCheckQuery = "SELECT * FROM users WHERE email = ? AND ID != ?";
-    const existingUsers = await executeQuery(emailCheckQuery, [
-      req.body.email,
-      userInfo.id,
-    ]);
-
+  if (email) {
+    const existingUsers = await executeQuery(
+      "SELECT ID FROM users WHERE LOWER(email) = ? AND ID != ?",
+      [email, req.user.id]
+    );
     if (existingUsers.length) {
       return res.status(400).json("Email address already exists!");
     }
-
-    const updateQuery = `
-      UPDATE users 
-      SET first_name = ?, last_name = ?, email = ?, city = ?, address = ?, phone = ? 
-      WHERE ID = ?
-    `;
-
-    const values = [
-      req.body.first_name || userInfo.first_name,
-      req.body.last_name || userInfo.last_name,
-      req.body.email || userInfo.email,
-      req.body.city || userInfo.city,
-      req.body.address || userInfo.address,
-      req.body.phone || userInfo.phone,
-      userInfo.id,
-    ];
-
-    const result = await executeQuery(updateQuery, values);
-    if (result.affectedRows > 0) return res.json("Updated");
-
-    return res.status(403).json("You can update only your account");
-  } catch (error) {
-    console.error("Error updating user:", error);
-    return res.status(500).json(error);
   }
+
+  const updateQuery = `
+    UPDATE users
+    SET first_name = COALESCE(?, first_name), last_name = COALESCE(?, last_name),
+        email = COALESCE(?, email), city = COALESCE(?, city),
+        address = COALESCE(?, address), phone = COALESCE(?, phone)
+    WHERE ID = ?
+  `;
+
+  const values = [
+    body.first_name || null,
+    body.last_name || null,
+    email,
+    body.city || null,
+    body.address || null,
+    body.phone || null,
+    req.user.id,
+  ];
+
+  const result = await executeQuery(updateQuery, values);
+  if (result.affectedRows > 0) return res.json("Updated");
+
+  return res.status(403).json("You can update only your account");
 };
 
-// Change user password
+// Change the logged-in user's password
 const changePassword = async (req, res) => {
-  try {
-    const token = req.cookies.access_token;
-    if (!token) return res.status(401).json("Not authenticated");
-
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-    const { old_password, new_password } = req.body;
-    const userId = decodedToken.id;
-
-    // Fetch user data
-    const userQuery = "SELECT * FROM users WHERE ID = ?";
-    const userData = await executeQuery(userQuery, [userId]);
-
-    if (userData.length === 0) return res.status(404).json("User not found!");
-
-    // Validate old password
-    const isPasswordCorrect = bcrypt.compareSync(
-      old_password,
-      userData[0].password
-    );
-    if (!isPasswordCorrect) return res.status(400).json("Invalid old password");
-
-    // Hash the new password
-    const salt = bcrypt.genSaltSync(10);
-    const hashedPassword = bcrypt.hashSync(new_password, salt);
-
-    // Update password
-    const updatePasswordQuery = "UPDATE users SET password = ? WHERE ID = ?";
-    const result = await executeQuery(updatePasswordQuery, [
-      hashedPassword,
-      userId,
-    ]);
-
-    if (result.affectedRows > 0)
-      return res.json("Password changed successfully!");
-
-    return res.status(500).json("Failed to change password");
-  } catch (error) {
-    console.error("Error changing password:", error);
-    return res.status(500).json(error);
+  const { old_password, new_password } = req.body || {};
+  if (typeof old_password !== "string" || typeof new_password !== "string" || !new_password) {
+    throw new HttpError(400, "Old and new password are required");
   }
+
+  const userData = await executeQuery("SELECT password FROM users WHERE ID = ?", [req.user.id]);
+  if (userData.length === 0) return res.status(404).json("User not found!");
+
+  const isPasswordCorrect = bcrypt.compareSync(old_password, userData[0].password);
+  if (!isPasswordCorrect) return res.status(400).json("Invalid old password");
+
+  const hashedPassword = bcrypt.hashSync(new_password, bcrypt.genSaltSync(10));
+  const result = await executeQuery("UPDATE users SET password = ? WHERE ID = ?", [
+    hashedPassword,
+    req.user.id,
+  ]);
+
+  if (result.affectedRows > 0) return res.json("Password changed successfully!");
+
+  return res.status(500).json("Failed to change password");
 };
 
-// Get user information
+// The logged-in user's account details
 const getUserInfo = async (req, res) => {
-  try {
-    const token = req.cookies.access_token || req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json("Not authenticated");
-
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = decodedToken.id;
-
-    const query = "SELECT * FROM users WHERE ID = ?";
-    const data = await executeQuery(query, [userId]);
-
-    if (data.length === 0) return res.status(404).json("User not found!");
-
-    return res.json(data[0]);
-  } catch (error) {
-    console.error("Error fetching user info:", error);
-    return res.status(500).json(error);
-  }
+  const data = await executeQuery(`SELECT ${ACCOUNT_COLUMNS} FROM users WHERE ID = ?`, [req.user.id]);
+  if (data.length === 0) return res.status(404).json("User not found!");
+  return res.json(data[0]);
 };
 
-// Get user role
+// The logged-in user's current role (from the database, not the token)
 const getUserRole = async (req, res) => {
-  try {
-    const token = req.cookies.access_token || req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ message: "No token found" });
-
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-    return res.status(200).json({ role: decodedToken.role });
-  } catch (error) {
-    console.error("Token verification failed:", error);
-    return res.status(500).json({ message: "Invalid token" });
-  }
+  return res.status(200).json({ role: req.user.role });
 };
 
-// Deactivate user account
+// Deactivate the logged-in user's account
 const deactivateAccount = async (req, res) => {
-  try {
-    const token = req.cookies.access_token;
-    if (!token) return res.status(401).json("Not authenticated");
-
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = decodedToken.id;
-
-    const updateQuery = "UPDATE users SET active = 0 WHERE ID = ?";
-    const result = await executeQuery(updateQuery, [userId]);
-
-    if (result.affectedRows > 0)
-      return res.json("Account deactivated successfully");
-
-    return res.status(500).json("Failed to deactivate account");
-  } catch (error) {
-    console.error("Error deactivating account:", error);
-    return res.status(500).json(error);
-  }
+  const result = await executeQuery("UPDATE users SET active = 0 WHERE ID = ?", [req.user.id]);
+  if (result.affectedRows > 0) return res.json("Account deactivated successfully");
+  return res.status(500).json("Failed to deactivate account");
 };
 
-// Contact Us - Send Email
+const EMAIL_PATTERN = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
+
+// Contact Us (public, rate-limited): mails the message to CONTACT_US_MAIL.
 const sendEmail = async (req, res) => {
-  try {
-    const { email, subject, message } = req.body;
+  const body = req.body || {};
+  const email = normalizeEmail(body.email);
+  const subject = typeof body.subject === "string" ? body.subject.replace(/[\r\n]+/g, " ").trim() : "";
+  const message = typeof body.message === "string" ? body.message.trim() : "";
 
-    const mailOptions = {
-      from: "Eco Collectors <your-email@example.com>",
-      to: process.env.CONTACT_US_MAIL, // Send all emails to this address
-      subject: subject,
-      html: `
-        <div style="font-family: Arial, sans-serif;">
-          <h2>New Contact Form Submission</h2>
-          <p><strong>Sender's Email:</strong> ${email}</p>
-          <p><strong>Subject:</strong> ${subject}</p>
-          <p><strong>Message:</strong></p>
-          <p>${message}</p>
-        </div>
-      `,
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.error("Failed to send email:", error);
-        return res.status(500).json({ message: "Failed to send email." });
-      } else {
-        console.log("Email sent:", info.response);
-        return res.status(200).json({ message: "Email sent successfully." });
-      }
-    });
-  } catch (error) {
-    console.error("Error in sendEmail:", error);
-    return res.status(500).json({ message: "Internal Server Error." });
+  if (!EMAIL_PATTERN.test(email) || email.length > 254) {
+    return res.status(400).json({ message: "Please enter a valid e-mail address." });
   }
+  if (!subject || subject.length > 150) {
+    return res.status(400).json({ message: "The subject must be 1-150 characters." });
+  }
+  if (!message || message.length > 5000) {
+    return res.status(400).json({ message: "The message must be 1-5000 characters." });
+  }
+
+  const mailOptions = {
+    from: { name: "Eco Collectors", address: process.env.GMAIL_USERNAME },
+    to: process.env.CONTACT_US_MAIL, // Send all emails to this address
+    replyTo: email,
+    subject: `Contact form: ${subject}`,
+    text: `From: ${email}\nSubject: ${subject}\n\n${message}`,
+    html: `
+      <div style="font-family: Arial, sans-serif;">
+        <h2>New Contact Form Submission</h2>
+        <p><strong>Sender's Email:</strong> ${escapeHtml(email)}</p>
+        <p><strong>Subject:</strong> ${escapeHtml(subject)}</p>
+        <p><strong>Message:</strong></p>
+        <p style="white-space: pre-wrap;">${escapeHtml(message)}</p>
+      </div>
+    `,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error("Failed to send the contact e-mail:", error.code || error.message);
+    return res.status(500).json({ message: "Failed to send email." });
+  }
+  return res.status(200).json({ message: "Email sent successfully." });
 };
 
-module.exports = {
-  updateUser: updateUser,
-  changePassword: changePassword,
-  getUserInfo: getUserInfo,
-  getUserRole: getUserRole,
-  deactivateAccount: deactivateAccount,
-  sendEmail: sendEmail,
-};
+module.exports = asyncHandlers({
+  updateUser,
+  changePassword,
+  getUserInfo,
+  getUserRole,
+  deactivateAccount,
+  sendEmail,
+});
