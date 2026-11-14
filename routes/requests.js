@@ -8,15 +8,20 @@ const {
   updateRequestType,
   updateRequestByUser,
 } = require('../controllers/requests.js');
+const { requireAuth, optionalAuth, requireRole } = require('../middleware/auth');
+const { ROLE } = require('../constants');
 
 const router = express.Router();
 
-router.get('/', getRequests);
-router.get('/recycle/:id', getRequestForRecycle);
-router.get('/:id', getRequest);
-router.post('/add', addRequest);
-router.delete('/:id', deleteRequest);
-router.put('/:id', updateRequestType);
-router.put('/userUpdate/:id', updateRequestByUser);
+// Who may collect requests (the map shows "Collect" to these roles)
+const collectors = requireRole(ROLE.ADMIN, ROLE.RECYCLER, ROLE.MANAGER);
+
+router.get('/', optionalAuth, getRequests);
+router.get('/recycle/:id', requireAuth, collectors, getRequestForRecycle);
+router.get('/:id', requireAuth, getRequest);
+router.post('/add', requireAuth, addRequest);
+router.delete('/:id', requireAuth, deleteRequest);
+router.put('/:id', requireAuth, collectors, updateRequestType);
+router.put('/userUpdate/:id', requireAuth, updateRequestByUser);
 
 module.exports = router;

@@ -1,13 +1,7 @@
-const jwt = require("jsonwebtoken");
 const executeQuery = require("../dbHelper");
 
-const WelcomeManagerData = async (req, res) => {
+const WelcomeManagerData = async (req, res, next) => {
   try {
-    const token = req.cookies.access_token || req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json("Not authenticated");
-
-    jwt.verify(token, process.env.JWT_SECRET);
-
     // Define queries
     const queries = {
       stats: `
@@ -59,11 +53,7 @@ const WelcomeManagerData = async (req, res) => {
       activeBinsCount,
     });
   } catch (error) {
-    console.error("Error fetching manager data:", error);
-    if (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError") {
-      return res.status(401).json("Invalid or expired token");
-    }
-    return res.status(500).json("Internal server error");
+    next(error);
   }
 };
 

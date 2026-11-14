@@ -1,101 +1,83 @@
 const executeQuery = require("../dbHelper");
-const jwt = require("jsonwebtoken");
+const { withTransaction } = require("../dbHelper");
+const { ROLE, STATUS, MAX_BOTTLES } = require("../constants");
+const { HttpError, asyncHandlers, toId, toInt } = require("../lib/http");
 
-// Get user requests
+// The owner's requests (the :id in the URL is ignored: always the logged-in user's).
 const getUserRequests = async (req, res) => {
-  try {
-    const token = req.cookies.access_token;
-    if (!token) return res.status(401).json("Not authenticated");
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = decoded.id;
-
-    const q = "SELECT * FROM user_requests WHERE user_id = ?";
-    const data = await executeQuery(q, [userId]);
-
-    return res.status(200).json(data);
-  } catch (error) {
-    console.error("Error in getUserRequests:", error);
-    return res.status(500).json({ error: "Internal Server Error" });
-  }
+  const data = await executeQuery("SELECT * FROM user_requests WHERE user_id = ?", [req.user.id]);
+  return res.status(200).json(data);
 };
 
-// Update request status
+// What the owner may do, as target status -> statuses it may come from.
+const OWNER_TRANSITIONS = {
+  [STATUS.AWAITS_PICKUP]: [STATUS.AWAITS_APPROVAL], // accept the recycler
+  [STATUS.AWAITS_RECYCLER]: [STATUS.AWAITS_APPROVAL, STATUS.AWAITS_PICKUP], // decline the recycler
+  [STATUS.CANCELED]: [STATUS.AWAITS_RECYCLER, STATUS.AWAITS_APPROVAL, STATUS.AWAITS_PICKUP],
+  [STATUS.COMPLETED]: [STATUS.AWAITS_PICKUP], // bottles handed over
+};
+
+// The owner moves their request on. Completing it credits the bottles to the owner and the recycler.
 const updateRequestStatus = async (req, res) => {
-  try {
-    const token = req.cookies.access_token;
-    if (!token) return res.status(401).json("Not authenticated");
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const requestId = req.params.id;
-    const { status, newBottlesNumber } = req.body;
-
-    let type =
-      status === 1 ? "request" : status === 3 ? "completed" : "pending";
-
-    // Fetch request details
-    const getRequestQuery =
-      "SELECT bottles_number, user_id, recycler_id FROM user_requests WHERE request_id = ?";
-    const requestData = await executeQuery(getRequestQuery, [requestId]);
-
-    if (requestData.length === 0) {
-      return res.status(404).json("Request not found");
-    }
-
-    const { bottles_number, user_id, recycler_id } = requestData[0];
-    console.log("user_id:", user_id);
-    console.log("bottles_number:", bottles_number);
-    console.log("newBottlesNumber:", newBottlesNumber);
-
-    let updatedRecyclerId = status === 4 || status === 1 ? null : recycler_id;
-
-    // Update request status
-    const updateQ =
-      "UPDATE user_requests SET `status`=?, `type`=?, `recycler_id`=?, `completed_date`= CASE WHEN ? = 3 THEN NOW() ELSE NULL END WHERE `request_id` = ?";
-    await executeQuery(updateQ, [
-      status,
-      type,
-      updatedRecyclerId,
-      status,
-      requestId,
-    ]);
-
-    // Update user's amount if the status changed to 3 (completed)
-    if (status === 3) {
-      const updateAmountQ = "UPDATE users SET amount = amount + ? WHERE ID = ?";
-      await executeQuery(updateAmountQ, [newBottlesNumber, user_id]);
-
-      // Update bottles_number in the user_requests table
-      const updateBottlesNumberQ =
-        "UPDATE user_requests SET `bottles_number`=? WHERE `request_id` = ?";
-      await executeQuery(updateBottlesNumberQ, [newBottlesNumber, requestId]);
-
-      // Add bottles_number to recycler's amount
-      if (updatedRecyclerId) {
-        const updateRecyclerAmountQ =
-          "UPDATE users SET amount = amount + ? WHERE ID = ?";
-        await executeQuery(updateRecyclerAmountQ, [
-          newBottlesNumber,
-          updatedRecyclerId,
-        ]);
-      }
-
-      // Update the completed_date to the current time
-      const completedQ =
-        "UPDATE user_requests SET `completed_date`= NOW() WHERE `request_id` = ?";
-      await executeQuery(completedQ, [requestId]);
-    }
-
-    return res
-      .status(200)
-      .json({ message: "Request status updated successfully" });
-  } catch (error) {
-    console.error("Error in updateRequestStatus:", error);
-    return res.status(500).json({ error: "Internal Server Error" });
+  const requestId = toId(req.params.id);
+  const target = toInt(req.body && req.body.status);
+  if (!requestId) throw new HttpError(404, "Request not found");
+  if (!Object.prototype.hasOwnProperty.call(OWNER_TRANSITIONS, target)) {
+    throw new HttpError(400, "Invalid status");
   }
+
+  let bottles = null;
+  if (target === STATUS.COMPLETED) {
+    bottles = toInt(req.body.newBottlesNumber);
+    if (bottles === null || bottles < 1 || bottles > MAX_BOTTLES) {
+      throw new HttpError(400, `Bottles must be a whole number from 1 to ${MAX_BOTTLES}`);
+    }
+  }
+
+  await withTransaction(async (conn) => {
+    // FOR UPDATE: a double click can't complete (and credit) the same request twice.
+    const [rows] = await conn.query(
+      "SELECT user_id, recycler_id, status FROM user_requests WHERE request_id = ? FOR UPDATE",
+      [requestId]
+    );
+    if (rows.length === 0) throw new HttpError(404, "Request not found");
+    const request = rows[0];
+
+    if (req.user.role !== ROLE.ADMIN && request.user_id !== req.user.id) {
+      throw new HttpError(403, "You can update only your own requests");
+    }
+    if (!OWNER_TRANSITIONS[target].includes(request.status)) {
+      throw new HttpError(409, "This change isn't possible in the request's current status");
+    }
+
+    if (target === STATUS.COMPLETED) {
+      await conn.query(
+        "UPDATE user_requests SET status = ?, type = 'completed', bottles_number = ?, completed_date = NOW() WHERE request_id = ?",
+        [STATUS.COMPLETED, bottles, requestId]
+      );
+      await conn.query(
+        "UPDATE users SET amount = COALESCE(amount, 0) + ? WHERE ID = ?",
+        [bottles, request.user_id]
+      );
+      if (request.recycler_id) {
+        await conn.query(
+          "UPDATE users SET amount = COALESCE(amount, 0) + ? WHERE ID = ?",
+          [bottles, request.recycler_id]
+        );
+      }
+      return;
+    }
+
+    // Declining or canceling releases the recycler.
+    const releasesRecycler = target === STATUS.AWAITS_RECYCLER || target === STATUS.CANCELED;
+    const type = target === STATUS.AWAITS_RECYCLER ? "request" : "pending";
+    await conn.query(
+      "UPDATE user_requests SET status = ?, type = ?, recycler_id = ?, completed_date = NULL WHERE request_id = ?",
+      [target, type, releasesRecycler ? null : request.recycler_id, requestId]
+    );
+  });
+
+  return res.status(200).json({ message: "Request status updated successfully" });
 };
 
-module.exports = {
-  getUserRequests: getUserRequests,
-  updateRequestStatus: updateRequestStatus,
-};
+module.exports = asyncHandlers({ getUserRequests, updateRequestStatus });

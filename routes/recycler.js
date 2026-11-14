@@ -1,7 +1,11 @@
 const express = require('express');
 const recyclerControllers = require('../controllers/recycler.js');
+const { requireAuth, requireRole } = require('../middleware/auth');
+const { ROLE } = require('../constants');
 
 const router = express.Router();
+
+router.use(requireAuth, requireRole(ROLE.RECYCLER));
 
 // Recycle Requests
 router.get('/all-requests', recyclerControllers.fetchAllRequests);
