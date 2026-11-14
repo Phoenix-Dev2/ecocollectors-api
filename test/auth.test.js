@@ -1,6 +1,7 @@
-// Authentication, login/register, account endpoints, rate limits and error handling.
+// Authentication, login/register, password reset, account endpoints, rate limits and error handling.
 const { describe, it, before, after } = require("node:test");
 const assert = require("node:assert/strict");
+const jwt = require("jsonwebtoken");
 const h = require("./helpers");
 
 let ctx;
@@ -211,6 +212,128 @@ describe("welcome pages (S13)", () => {
     assert.equal((await api().get("/user/welcomeRecycler").set(h.bearer(recycler))).status, 200);
     assert.equal((await api().get("/user/welcomeUser").set(h.bearer(user))).status, 200);
     assert.equal((await api().get("/user/welcomeUser")).status, 401);
+  });
+});
+
+describe("password reset by e-mailed link (S8)", () => {
+  const flush = () => new Promise((resolve) => setImmediate(resolve)); // the mail goes out in the background
+  const linkIn = (mail) => new URL(mail.text.match(/https?:\/\/\S+/)[0]);
+  const ask = async (email) => {
+    ctx.sentMail.length = 0;
+    const res = await api().post("/auth/forgotPassword").send({ email });
+    await flush();
+    return res;
+  };
+  const tokenFromMail = () => linkIn(ctx.sentMail[0]).searchParams.get("token");
+  const reset = (token, password = "Brand-new-1") =>
+    api().post("/auth/resetPassword").send({ token, password });
+  const loginStatus = async (email, password) =>
+    (await api().post("/auth/login").send({ email, password })).status;
+  const resetSecretOf = async (user) =>
+    `${process.env.JWT_SECRET}.${(await h.getUserRow(ctx.db, user.id)).password}`;
+
+  it("answers the same for an active, an inactive and an unknown e-mail, and mails only the active one", async () => {
+    const active = await h.createUser(ctx.db);
+    const inactive = await h.createUser(ctx.db, { active: 0 });
+
+    const known = await ask(active.email.toUpperCase());
+    assert.equal(known.status, 200);
+    assert.equal(ctx.sentMail.length, 1);
+    const mail = ctx.sentMail[0];
+    assert.equal(mail.to, active.email);
+    assert.equal(mail.from.address, "noreply@example.test");
+    const link = linkIn(mail);
+    assert.equal(link.origin + link.pathname, "http://client.example.test/reset-password");
+    assert.ok(link.searchParams.get("token"));
+    assert.ok(mail.html.includes("/reset-password?token="));
+
+    const off = await ask(inactive.email);
+    assert.equal(ctx.sentMail.length, 0);
+    const unknown = await ask("nobody@example.test");
+    assert.equal(ctx.sentMail.length, 0);
+    for (const res of [off, unknown]) {
+      assert.equal(res.status, 200);
+      assert.deepEqual(res.body, known.body);
+    }
+  });
+
+  it("asking for a link doesn't change the password (it used to reset it for anyone)", async () => {
+    const user = await h.createUser(ctx.db);
+    await ask(user.email);
+    assert.equal(await loginStatus(user.email, h.PASSWORD), 200);
+  });
+
+  it("the link sets a new password, once", async () => {
+    const user = await h.createUser(ctx.db);
+    await ask(user.email);
+    const token = tokenFromMail();
+
+    assert.equal((await reset(token)).status, 200);
+    assert.equal(await loginStatus(user.email, "Brand-new-1"), 200);
+    assert.equal(await loginStatus(user.email, h.PASSWORD), 401);
+
+    const again = await reset(token, "Another-new-2");
+    assert.equal(again.status, 400);
+    assert.equal(await loginStatus(user.email, "Brand-new-1"), 200);
+  });
+
+  it("an older link dies when the password changes another way", async () => {
+    const user = await h.createUser(ctx.db);
+    await ask(user.email);
+    const token = tokenFromMail();
+    const changed = await api()
+      .put("/user/change-password")
+      .set(h.bearer(user))
+      .send({ old_password: h.PASSWORD, new_password: "Changed-pass-3" });
+    assert.equal(changed.status, 200);
+    assert.equal((await reset(token)).status, 400);
+    assert.equal(await loginStatus(user.email, "Changed-pass-3"), 200);
+  });
+
+  it("refuses expired, forged, login and other-purpose tokens", async () => {
+    const user = await h.createUser(ctx.db);
+    const secret = await resetSecretOf(user);
+    const now = Math.floor(Date.now() / 1000);
+    const tokens = {
+      expired: jwt.sign({ id: user.id, purpose: "password-reset", iat: now - 3600, exp: now - 60 }, secret),
+      forged: jwt.sign({ id: user.id, purpose: "password-reset" }, "a-guessed-secret", { expiresIn: "30m" }),
+      login: h.tokenFor(user),
+      otherPurpose: jwt.sign({ id: user.id, purpose: "something-else" }, secret, { expiresIn: "30m" }),
+      garbage: "not-a-token",
+    };
+    for (const [name, token] of Object.entries(tokens)) {
+      assert.equal((await reset(token)).status, 400, name);
+    }
+    assert.equal(await loginStatus(user.email, h.PASSWORD), 200);
+  });
+
+  it("refuses a link for an account deactivated since", async () => {
+    const user = await h.createUser(ctx.db);
+    await ask(user.email);
+    await ctx.db.query("UPDATE users SET active = 0 WHERE ID = ?", [user.id]);
+    assert.equal((await reset(tokenFromMail())).status, 400);
+  });
+
+  it("checks the new password and the input", async () => {
+    const user = await h.createUser(ctx.db);
+    await ask(user.email);
+    const token = tokenFromMail();
+    for (const weak of ["short1", "no-digits-here", "1234567890", "x1".repeat(16)]) {
+      assert.equal((await reset(token, weak)).status, 400, weak);
+    }
+    assert.equal((await api().post("/auth/resetPassword").send({ token })).status, 400);
+    assert.equal((await api().post("/auth/forgotPassword").send({})).status, 400);
+    // The weak attempts didn't use up the link
+    assert.equal((await reset(token)).status, 200);
+  });
+
+  it("checkActivation no longer tells whether an account exists", async () => {
+    const inactive = await h.createUser(ctx.db, { active: 0 });
+    for (const email of [inactive.email, "nobody@example.test"]) {
+      const res = await api().get("/auth/checkActivation").query({ email });
+      assert.equal(res.status, 200);
+      assert.deepEqual(res.body, { active: true });
+    }
   });
 });
 
