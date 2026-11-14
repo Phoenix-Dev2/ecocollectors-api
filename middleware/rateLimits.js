@@ -21,7 +21,7 @@ const limiter = ({ windowMinutes, limit }) =>
   });
 
 module.exports = {
-  // login, register, checkActivation
+  // login, register, resetPassword, checkActivation
   authLimiter: limiter({ windowMinutes: 15, limit: 30 }),
   // forgotPassword
   passwordResetLimiter: limiter({ windowMinutes: 60, limit: 5 }),

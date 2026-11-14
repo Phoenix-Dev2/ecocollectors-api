@@ -10,6 +10,8 @@ router.post('/login', authLimiter, authControllers.login);
 router.get('/logout', authControllers.logout);
 router.post('/logout', authControllers.logout);
 router.post('/forgotPassword', passwordResetLimiter, authControllers.forgotPassword);
+router.post('/resetPassword', authLimiter, authControllers.resetPassword);
+// Answers { active: true } without a lookup; only for the C-1 client. Remove after C-2.
 router.get('/checkActivation', authLimiter, authControllers.checkActivation);
 
 module.exports = router;
